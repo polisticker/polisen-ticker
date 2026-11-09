@@ -83,7 +83,7 @@
     <ul id="list"></ul>
   </div>
 </main>
-<footer>Inofficiell sida, inte från Polisen · Källa: Polisens öppna API, <a href="https://polisen.se/om-polisen/om-webbplatsen/oppna-data/api-over-polisens-handelser/" target="_blank" rel="noopener">polisen.se/api/events</a> · kartan visar händelser per län (API:t anger bara länsposition) · kartdata © Esri, OpenStreetMap · uppdateras var 60:e sekund · håll muspekaren över tickern för att pausa</footer>
+<footer>Inofficiell sida, inte från Polisen · Källa: Polisens öppna API, <a href="https://polisen.se/om-polisen/om-webbplatsen/oppna-data/api-over-polisens-handelser/" target="_blank" rel="noopener">polisen.se/api/events</a> · kartan visar händelser per län (API:t anger bara länsposition) · kartdata © Esri, OpenStreetMap · uppdateras var 60:e sekund · håll muspekaren över tickern för att pausa · anonym besöksräkning utan cookies (GoatCounter)</footer>
 
 <script>
 const API = 'https://polisen.se/api/events';
@@ -239,5 +239,6 @@ $('refresh').addEventListener('click', load);
 load();
 setInterval(load, REFRESH_MS);
 </script>
+<script data-goatcounter="https://polisticker.goatcounter.com/count" async src="https://gc.zgo.at/count.js"></script>
 </body>
 </html>
