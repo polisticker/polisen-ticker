@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Polishändelser live</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --text: #1a1d23; --muted: #646b78;
+    --border: #e1e4ea; --accent: #1f4fd1; --ticker-bg: #10203f; --ticker-text: #f2f5fb;
+    --new: #fff4cc; --sev: #c62828; --warn: #b26a00; --traffic: #1f6fb2;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f1218; --panel: #171b23; --text: #e6e9ef; --muted: #98a0ae;
+      --border: #2a303c; --accent: #7aa2ff; --ticker-bg: #0a1530; --ticker-text: #e9eefb;
+      --new: #3a3212; --sev: #ff6b6b; --warn: #f0a742; --traffic: #6cb4f0;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); }
+
+  .ticker { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; background: var(--ticker-bg); color: var(--ticker-text); overflow: hidden; height: 44px; }
+  .ticker .label { flex: none; padding: 0 14px; height: 100%; display: flex; align-items: center; gap: 8px; font-weight: 700; letter-spacing: .04em; background: rgba(255,255,255,.08); }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: #ff4d4d; animation: pulse 1.6s infinite; }
+  @keyframes pulse { 50% { opacity: .25; } }
+  .track { flex: 1; overflow: hidden; white-space: nowrap; mask-image: linear-gradient(90deg, transparent, #000 30px, #000 calc(100% - 30px), transparent); }
+  .belt { display: inline-block; padding-left: 100%; animation: scroll linear infinite; }
+  .ticker:hover .belt { animation-play-state: paused; }
+  .belt a { color: inherit; text-decoration: none; margin-right: 48px; }
+  .belt a:hover { text-decoration: underline; }
+  .belt b { color: #ffd166; font-weight: 600; }
+  @keyframes scroll { from { transform: translateX(0); } to { transform: translateX(-100%); } }
+
+  main { max-width: 1280px; margin: 0 auto; padding: 16px; }
+  .bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
+  select, input, button { font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; }
+  input { flex: 1; min-width: 160px; }
+  button { cursor: pointer; }
+  .status { color: var(--muted); font-size: 13px; margin-left: auto; }
+
+  .layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 16px; align-items: start; }
+  #map { position: sticky; top: 60px; height: calc(100vh - 160px); min-height: 360px; border: 1px solid var(--border); border-radius: 8px; z-index: 1; }
+  @media (max-width: 800px) { .layout { grid-template-columns: 1fr; } #map { position: static; height: 360px; } }
+  .leaflet-popup-content { font: 13px/1.4 system-ui, sans-serif; max-height: 260px; overflow: auto; }
+  .leaflet-popup-content p { margin: 0 0 6px; }
+  .map-label { background: none; border: none; box-shadow: none; color: #fff; font-weight: 700; font-size: 12px; text-shadow: 0 0 3px #000; }
+  ul { list-style: none; margin: 0; padding: 0; }
+  li { background: var(--panel); border: 1px solid var(--border); border-left: 4px solid var(--border); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; transition: background 2s; }
+  li.new { background: var(--new); }
+  li.sev { border-left-color: var(--sev); }
+  li.warn { border-left-color: var(--warn); }
+  li.traffic { border-left-color: var(--traffic); }
+  .pub { margin-left: 10px; font-size: 12px; color: var(--muted); }
+  .meta { display: flex; flex-wrap: wrap; gap: 10px; font-size: 13px; color: var(--muted); }
+  .type { font-weight: 600; color: var(--text); }
+  .summary { margin: 4px 0 0; }
+  li a { color: var(--accent); font-size: 13px; text-decoration: none; }
+  li a:hover { text-decoration: underline; }
+  .err { color: var(--sev); }
+  footer { color: var(--muted); font-size: 12px; text-align: center; padding: 16px; }
+  footer a { color: inherit; }
+</style>
+</head>
+<body>
+<div class="ticker" aria-label="Senaste händelser">
+  <div class="label"><span class="dot"></span>LIVE</div>
+  <div class="track"><div class="belt" id="belt">Hämtar händelser…</div></div>
+</div>
+
+<main>
+  <div class="bar">
+    <select id="county"><option value="">Alla län</option></select>
+    <select id="type"><option value="">Alla händelsetyper</option></select>
+    <input id="q" type="search" placeholder="Sök ort, text…">
+    <button id="refresh" title="Uppdatera nu">⟳</button>
+    <span class="status" id="status"></span>
+  </div>
+  <div class="layout">
+    <div id="map" aria-label="Karta över händelser per län"></div>
+    <ul id="list"></ul>
+  </div>
+</main>
+<footer>Inofficiell sida, inte från Polisen · Källa: Polisens öppna API, <a href="https://polisen.se/om-polisen/om-webbplatsen/oppna-data/api-over-polisens-handelser/" target="_blank" rel="noopener">polisen.se/api/events</a> · kartan visar händelser per län (API:t anger bara länsposition) · kartdata © Esri, OpenStreetMap · uppdateras var 60:e sekund · håll muspekaren över tickern för att pausa</footer>
+
+<script>
+const API = 'https://polisen.se/api/events';
+const BASE = 'https://polisen.se';
+const REFRESH_MS = 60_000;
+const SEVERE = /mord|dråp|skottlossning|sprängning|rån|grov|mordbrand|explosion|knivlagen|vapenlagen|sexualbrott/i;
+const WARN = /brand|misshandel|olaga hot|inbrott|räddningsinsats|försvunnen/i;
+const TRAFFIC = /trafik|rattfylleri/i;
+
+let events = [];
+const seen = new Set();
+let firstLoad = true;
+const $ = id => document.getElementById(id);
+
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const time = dt => dt.slice(11, 16);
+const date = dt => dt.slice(0, 10);
+const pad = n => String(n).padStart(2, '0');
+const localDate = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const MONTHS = ['januari', 'februari', 'mars', 'april', 'maj', 'juni', 'juli', 'augusti', 'september', 'oktober', 'november', 'december'];
+// `datetime` is when Polisen published/updated the event; the time it happened is only in the name ("10 oktober 16.18, …").
+function eventTime(e) {
+  const m = e.name.match(/^(\d{1,2}) (\p{L}+) (\d{1,2})[.:](\d{2})/u);
+  const mon = m ? MONTHS.indexOf(m[2].toLowerCase()) : -1;
+  if (mon < 0) return e.datetime.slice(0, 16);
+  let year = +e.datetime.slice(0, 4);
+  if (mon + 1 > +e.datetime.slice(5, 7)) year--; // December event published in January
+  return `${year}-${pad(mon + 1)}-${pad(m[1])} ${pad(m[3])}:${m[4]}`;
+}
+function ago(when) {
+  const min = Math.round((Date.now() - new Date(when.replace(' ', 'T'))) / 60000);
+  if (min < 1) return 'nyss';
+  if (min < 60) return `för ${min} min sedan`;
+  if (min < 24 * 60) return `för ${Math.floor(min / 60)} h ${min % 60} min sedan`;
+  return `för ${Math.floor(min / 1440)} d sedan`;
+}
+const place = e => e.name.split(',').pop().trim();
+const cls = e => SEVERE.test(e.type) ? 'sev' : WARN.test(e.type) ? 'warn' : TRAFFIC.test(e.type) ? 'traffic' : '';
+
+function fillSelect(el, values) {
+  const cur = el.value;
+  el.length = 1;
+  [...new Set(values)].sort((a, b) => a.localeCompare(b, 'sv')).forEach(v => el.add(new Option(v, v)));
+  el.value = cur;
+}
+
+function filtered() {
+  const c = $('county').value, t = $('type').value, q = $('q').value.trim().toLowerCase();
+  return events.filter(e =>
+    (!c || e.location.name === c) &&
+    (!t || e.type.trim() === t) &&
+    (!q || (e.name + ' ' + e.summary).toLowerCase().includes(q)));
+}
+
+const COLORS = { sev: '#d32f2f', warn: '#ef8a00', traffic: '#1f6fb2', '': '#6b7280' };
+const RANK = { sev: 3, warn: 2, traffic: 1, '': 0 };
+const map = L.map('map', { scrollWheelZoom: true }).setView([62.5, 16.5], 4);
+// Esri gray canvas – keyless and works from file:// (OSM's own tiles need a Referer, CARTO now needs a key).
+const dark = matchMedia('(prefers-color-scheme: dark)').matches;
+const esri = name => `https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/${name}/MapServer/tile/{z}/{y}/{x}`;
+L.tileLayer(esri(dark ? 'World_Dark_Gray_Base' : 'World_Light_Gray_Base'), {
+  maxZoom: 12, attribution: 'Tiles &copy; Esri &mdash; Esri, HERE, Garmin, &copy; OpenStreetMap contributors'
+}).addTo(map);
+L.tileLayer(esri(dark ? 'World_Dark_Gray_Reference' : 'World_Light_Gray_Reference'), { maxZoom: 12 }).addTo(map);
+const layer = L.layerGroup().addTo(map);
+
+function renderMap(items) {
+  layer.clearLayers();
+  const groups = new Map();
+  for (const e of items) {
+    const g = groups.get(e.location.name) || { gps: e.location.gps, list: [] };
+    g.list.push(e);
+    groups.set(e.location.name, g);
+  }
+  const max = Math.max(1, ...[...groups.values()].map(g => g.list.length));
+  for (const [county, g] of groups) {
+    const [lat, lng] = g.gps.split(',').map(Number);
+    if (!isFinite(lat) || !isFinite(lng)) continue;
+    const worst = g.list.map(cls).reduce((a, b) => RANK[b] > RANK[a] ? b : a, '');
+    const n = g.list.length;
+    const m = L.circleMarker([lat, lng], {
+      radius: 8 + 22 * Math.sqrt(n / max), color: '#fff', weight: 1.5,
+      fillColor: COLORS[worst], fillOpacity: .8
+    }).addTo(layer);
+    m.bindTooltip(String(n), { permanent: true, direction: 'center', className: 'map-label' });
+    m.bindPopup(`<p><b>${esc(county)}</b> – ${n} händelser</p>` +
+      g.list.slice(0, 15).map(e => `<p><a href="${BASE + esc(e.url)}" target="_blank" rel="noopener">${esc(time(e.when))} ${esc(e.type)}</a> · ${esc(place(e))}<br>${esc(e.summary)}</p>`).join('') +
+      (n > 15 ? `<p><a href="#" data-county="${esc(county)}">Visa alla ${n} i listan →</a></p>` : `<p><a href="#" data-county="${esc(county)}">Filtrera listan på länet →</a></p>`));
+  }
+}
+
+map.on('popupopen', ev => {
+  ev.popup.getElement().querySelectorAll('a[data-county]').forEach(a => a.addEventListener('click', e => {
+    e.preventDefault();
+    $('county').value = a.dataset.county;
+    map.closePopup();
+    render();
+  }));
+});
+
+function render(newIds = new Set()) {
+  const items = filtered();
+  const today = localDate(new Date());
+
+  $('list').innerHTML = items.slice(0, 200).map(e => `
+    <li class="${cls(e)} ${newIds.has(e.id) ? 'new' : ''}">
+      <div class="meta">
+        <span><b>${date(e.when) === today ? '' : esc(date(e.when)) + ' '}${esc(time(e.when))}</b> · ${esc(ago(e.when))}</span>
+        <span class="type">${esc(e.type)}</span>
+        <span>${esc(place(e))} · ${esc(e.location.name)}</span>
+      </div>
+      <p class="summary">${esc(e.summary)}</p>
+      <a href="${BASE + esc(e.url)}" target="_blank" rel="noopener">Läs mer →</a>
+      <span class="pub">publicerad ${date(e.datetime) === today ? '' : esc(date(e.datetime)) + ' '}${esc(time(e.datetime))}</span>
+    </li>`).join('') || '<li>Inga händelser matchar filtret.</li>';
+  setTimeout(() => document.querySelectorAll('li.new').forEach(li => li.classList.remove('new')), 4000);
+
+  renderMap(items);
+
+  const tick = items.slice(0, 25);
+  const belt = $('belt');
+  belt.innerHTML = tick.map(e =>
+    `<a href="${BASE + esc(e.url)}" target="_blank" rel="noopener"><b>${esc(time(e.when))} ${esc(e.type)}</b> · ${esc(place(e))} – ${esc(e.summary)}</a>`
+  ).join('') || 'Inga händelser.';
+  // Constant reading speed regardless of content length (~90 px/s).
+  requestAnimationFrame(() => belt.style.animationDuration = Math.max(20, belt.scrollWidth / 90) + 's');
+}
+
+async function load() {
+  $('status').textContent = 'Uppdaterar…';
+  try {
+    const res = await fetch(API, { cache: 'no-store' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    data.forEach(e => e.when = eventTime(e));
+    data.sort((a, b) => b.when.localeCompare(a.when) || b.datetime.localeCompare(a.datetime));
+    const newIds = new Set(firstLoad ? [] : data.filter(e => !seen.has(e.id)).map(e => e.id));
+    data.forEach(e => seen.add(e.id));
+    events = data;
+    firstLoad = false;
+    fillSelect($('county'), events.map(e => e.location.name));
+    fillSelect($('type'), events.map(e => e.type.trim()));
+    render(newIds);
+    $('status').innerHTML = `${events.length} händelser · ${newIds.size ? `<b>${newIds.size} nya</b> · ` : ''}uppdaterad ${new Date().toLocaleTimeString('sv-SE')}`;
+  } catch (err) {
+    $('status').innerHTML = `<span class="err">Kunde inte hämta (${esc(err.message)})</span>`;
+  }
+}
+
+['county', 'type'].forEach(id => $(id).addEventListener('change', () => render()));
+$('q').addEventListener('input', () => render());
+$('refresh').addEventListener('click', load);
+load();
+setInterval(load, REFRESH_MS);
+</script>
+</body>
+</html>
