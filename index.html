@@ -224,12 +224,30 @@ function render(newIds = new Set()) {
   requestAnimationFrame(() => belt.style.animationDuration = Math.max(20, belt.scrollWidth / 90) + 's');
 }
 
+async function getJson(url) {
+  const res = await fetch(url, { cache: 'no-store' });
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  return res.json();
+}
+
+// API:t svarar ibland med [] utan filter (sett 2026-11-11) medan ?DateTime= fungerar.
+// Reserv: hämta innevarande + föregående månad, slå ihop och behåll de 500 senaste.
+async function fetchEvents() {
+  const data = await getJson(API);
+  if (data.length) return data;
+  const now = new Date();
+  const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const ym = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  const lists = await Promise.all([ym(now), ym(prev)].map(m => getJson(`${API}?DateTime=${m}`).catch(() => [])));
+  const byId = new Map();
+  lists.flat().forEach(e => byId.set(e.id, e));
+  return [...byId.values()].sort((a, b) => b.datetime.localeCompare(a.datetime)).slice(0, 500);
+}
+
 async function load() {
   $('status').textContent = 'Uppdaterar…';
   try {
-    const res = await fetch(API, { cache: 'no-store' });
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    const data = await res.json();
+    const data = await fetchEvents();
     data.forEach(e => e.when = eventTime(e));
     data.sort((a, b) => b.when.localeCompare(a.when) || b.datetime.localeCompare(a.datetime));
     const newIds = new Set(firstLoad ? [] : data.filter(e => !seen.has(e.id)).map(e => e.id));
