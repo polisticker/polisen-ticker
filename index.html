@@ -152,7 +152,8 @@ function filtered() {
 
 const COLORS = { sev: '#d32f2f', warn: '#ef8a00', traffic: '#1f6fb2', '': '#6b7280' };
 const RANK = { sev: 3, warn: 2, traffic: 1, '': 0 };
-const map = L.map('map', { scrollWheelZoom: true }).setView([62.5, 16.5], 4);
+const SWEDEN = [[55.3, 10.9], [69.1, 24.2]];
+const map = L.map('map', { scrollWheelZoom: true, zoomSnap: 0.25 }).fitBounds(SWEDEN, { padding: [8, 8] });
 // Esri gray canvas – keyless and works from file:// (OSM's own tiles need a Referer, CARTO now needs a key).
 const dark = matchMedia('(prefers-color-scheme: dark)').matches;
 const esri = name => `https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/${name}/MapServer/tile/{z}/{y}/{x}`;
